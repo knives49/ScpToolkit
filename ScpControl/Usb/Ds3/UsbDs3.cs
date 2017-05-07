@@ -7,6 +7,7 @@ using System.Threading;
 using ScpControl.ScpCore;
 using ScpControl.Shared.Core;
 using ScpControl.Utilities;
+using ScpControl.Database;
 
 namespace ScpControl.Usb.Ds3
 {
@@ -31,8 +32,8 @@ namespace ScpControl.Usb.Ds3
 
         private readonly byte[] _hidReport =
         {
-            0x00, 0xFF, 0x00, 0xFF, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0xFF, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0xFF,
             0xFF, 0x27, 0x10, 0x00, 0x32,
             0xFF, 0x27, 0x10, 0x00, 0x32,
             0xFF, 0x27, 0x10, 0x00, 0x32,
@@ -146,17 +147,34 @@ namespace ScpControl.Usb.Ds3
 					if (SendTransfer(UsbHidRequestType.HostToDevice, UsbHidRequest.SetReport, 0x03EF, _eepromSetReport, ref transfered))
 					{
 						//read EEPROM
-						var buffer = new byte[64]; //maybe this should be 49 as well
+						var buffer = new byte[64]; //maybe this should be 49 as well, we only use first 49 bytes max
 						transfered = buffer.Length;
 						if (SendTransfer(UsbHidRequestType.DeviceToHost, UsbHidRequest.GetReport, 0x03EF, buffer, ref transfered) && transfered >= 49)
 						{
 							_cal = new DS3CalInstance(buffer);
+							var eepromBuffer = buffer;
 
 							//read version
 							buffer = new byte[49];
 							transfered = buffer.Length;
 							if (SendTransfer(UsbHidRequestType.DeviceToHost, UsbHidRequest.GetReport, 0x0301, buffer, ref transfered) && transfered >= 49)
+							{
 								_cal.InitialCal(buffer);
+								var statusBuffer = buffer;
+								
+								var totalBuffer = new byte[49 + 49];
+								Array.Copy(eepromBuffer, 0, totalBuffer, 0, Math.Min(eepromBuffer.Length,49));
+								Array.Copy(statusBuffer, 0, totalBuffer, 49, Math.Min(statusBuffer.Length,49));
+
+								using (var db = new ScpDb())
+								{
+									using (var tran = db.Engine.GetTransaction())
+									{
+										tran.Insert(ScpDb.TableDS3Data, DeviceAddress.GetAddressBytes(), totalBuffer);
+										tran.Commit();
+									}
+								}
+							}
 						}
 					}
                 }
@@ -216,16 +234,22 @@ namespace ScpControl.Usb.Ds3
             {
                 var transfered = 0;
 
-                if (GlobalConfiguration.Instance.DisableRumble)
-                {
-                    _hidReport[2] = 0;
-                    _hidReport[4] = 0;
-                }
-                else
-                {
-                    _hidReport[2] = (byte)(small > 0 ? 0x01 : 0x00);
-                    _hidReport[4] = large;
-                }
+				if (_cal != null)
+					_cal.ApplyCalToOutReport(_hidReport);
+
+				if (_hidReport[3] != 0xFF) //if not already used for motion cal
+				{
+					if (GlobalConfiguration.Instance.DisableRumble)
+					{
+						_hidReport[2] = 0;
+						_hidReport[4] = 0;
+					}
+					else
+					{
+						_hidReport[2] = (byte)(small > 0 ? 0x01 : 0x00);
+						_hidReport[4] = large;
+					}
+				}               
 
                 _hidReport[9] = _ledStatus;
 

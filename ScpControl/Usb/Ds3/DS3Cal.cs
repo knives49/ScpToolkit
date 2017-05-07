@@ -20,6 +20,16 @@ namespace ScpControl.Usb.Ds3
 
 		public DS3CalData(byte[] eepromData)
 		{
+			if (eepromData == null) //default values
+			{
+				_calX.val1 = _calX.val2 = 0;
+				_calY.val1 = _calY.val2 = 0;
+				_calZ.val1 = _calZ.val2 = 0;
+				_calG.val1 = 512;
+				_calG.val2 = 0x80;
+				return;
+			}
+
 			int idx = 0x11; //starts here, has 8 big endian uint16s
 
 			_calX.val1 = (uint)eepromData[idx + 1] + ((uint)eepromData[idx + 0] << 8); idx += 2;
@@ -99,6 +109,12 @@ namespace ScpControl.Usb.Ds3
 
 		public int InitialCal(byte[] buffer)
 		{
+			if (buffer == null) //default values
+			{
+				_setReportFlags = 0x38; //theres no way to get this right without status bytes
+				return DS3CalLibrary.Instance.InitialCal((ushort)_calValues.G.val2, (ushort)_calValues.G.val1, out _setReportCalByte, _gyroStruct);
+			}
+
 			_setReportFlags = 0;
 			if (buffer[8] == 0x18 && buffer[9] == 0x18 && buffer[10] == 0x18 && buffer[11] == 0x18)
 				_setReportFlags |= 0x8;
@@ -135,27 +151,16 @@ namespace ScpControl.Usb.Ds3
 
 		public void ApplyCalToOutReport(byte[] outBuffer, int startOffs=0)
 		{
-			outBuffer[startOffs+9] = 0xFF;
-			if ((_setReportFlags & 0x10) == 0)
+			if ((_setReportFlags & 0x10) == 0) //sixaxis ? because these are used for motors in ds3
 			{
 				outBuffer[startOffs + 3] = 0xFF;
 				outBuffer[startOffs + 4] = _setReportCalByte;
 			}
-			else
-			{
-				outBuffer[startOffs + 3] = 0;
-				outBuffer[startOffs + 4] = 0;
-			}
 
 			if ((_setReportFlags & 0x20) != 0)
 			{
-				outBuffer[startOffs+5] = 0xFF;
-				outBuffer[startOffs+6] = _setReportCalByte;
-			}
-			else
-			{
-				outBuffer[startOffs + 5] = 0;
-				outBuffer[startOffs + 6] = 0;
+				outBuffer[startOffs + 5] = 0xFF;
+				outBuffer[startOffs + 6] = _setReportCalByte;
 			}
 		}
 
