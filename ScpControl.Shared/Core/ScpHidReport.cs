@@ -220,7 +220,12 @@ namespace ScpControl.Shared.Core
                 switch (Model)
                 {
                     case DsModel.DS3:
-                        throw new NotImplementedException("DualShock 3 accelerometer readout not implemented yet.");
+						return new DsAccelerometer
+						{
+							X = (short)((RawBytes[0x2A + 8] << 8) | RawBytes[0x29 + 8]),
+							Y = (short)((RawBytes[0x2C + 8] << 8) | RawBytes[0x2B + 8]),
+							Z = (short)((RawBytes[0x2E + 8] << 8) | RawBytes[0x2D + 8])
+						};
                     case DsModel.DS4:
                         return new DsAccelerometer
                         {
@@ -245,7 +250,12 @@ namespace ScpControl.Shared.Core
                 switch (Model)
                 {
                     case DsModel.DS3:
-                        throw new NotImplementedException("DualShock 3 gyroscope readout not implemented yet.");
+						return new DsGyroscope
+						{
+							Roll = 0,
+							Yaw = (short)((RawBytes[0x30 + 8] << 8) | RawBytes[0x2F + 8]),
+							Pitch = 0
+						};
                     case DsModel.DS4:
                         return new DsGyroscope
                         {

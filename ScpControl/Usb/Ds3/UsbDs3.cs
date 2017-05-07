@@ -17,6 +17,15 @@ namespace ScpControl.Usb.Ds3
     {
         #region HID Reports
 
+		private readonly byte[] _eepromSetReport =
+		{
+			0x00, 0x00, 0x00, 0x00, 0x03, 0x01, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+		};
+
+		private DS3CalInstance _cal;
+
         private readonly byte[] _hidCommandEnable = { 0x42, 0x0C, 0x00, 0x00 };
         private readonly byte[] _ledOffsets = { 0x02, 0x04, 0x08, 0x10 };
 
@@ -132,6 +141,24 @@ namespace ScpControl.Usb.Ds3
                 else
                 {
                     Log.Info("Genuine Sony DualShock 3 detected");
+
+					//Switch to initial read (for eeprom and version)
+					if (SendTransfer(UsbHidRequestType.HostToDevice, UsbHidRequest.SetReport, 0x03EF, _eepromSetReport, ref transfered))
+					{
+						//read EEPROM
+						var buffer = new byte[64]; //maybe this should be 49 as well
+						transfered = buffer.Length;
+						if (SendTransfer(UsbHidRequestType.DeviceToHost, UsbHidRequest.GetReport, 0x03EF, buffer, ref transfered) && transfered >= 49)
+						{
+							_cal = new DS3CalInstance(buffer);
+
+							//read version
+							buffer = new byte[49];
+							transfered = buffer.Length;
+							if (SendTransfer(UsbHidRequestType.DeviceToHost, UsbHidRequest.GetReport, 0x0301, buffer, ref transfered) && transfered >= 49)
+								_cal.InitialCal(buffer);
+						}
+					}
                 }
             }
 
@@ -144,7 +171,23 @@ namespace ScpControl.Usb.Ds3
 
             if (IsActive)
             {
-                var transfered = 0;
+				var transfered = 0;
+
+				if (_cal != null)
+				{
+					//send initial cal value
+					var outBuffer = new byte[48];
+					_cal.ApplyCalToOutReport(outBuffer);
+
+					if (SendTransfer(UsbHidRequestType.HostToDevice, UsbHidRequest.SetReport,
+						ToValue(UsbHidReportRequestType.Output, UsbHidReportRequestId.One),
+						outBuffer, ref transfered) == false)
+					{
+						Log.ErrorFormat("Couldn't send cal control request to device {0}, error: {1}", DeviceAddress.AsFriendlyName(),
+							new Win32Exception(Marshal.GetLastWin32Error()));
+						return false;
+					}
+				}
 
                 if (SendTransfer(UsbHidRequestType.HostToDevice, UsbHidRequest.SetReport, 0x03F4, _hidCommandEnable, ref transfered))
                 {
@@ -230,6 +273,10 @@ namespace ScpControl.Usb.Ds3
 
             // set packet counter
             inputReport.PacketCounter = PacketCounter;
+
+			// convert accel/gyro values
+			if (_cal != null)
+				_cal.ApplyCalToInReport(report);
 
             // copy controller data to report packet
             Buffer.BlockCopy(report, 0, inputReport.RawBytes, 8, 49);
@@ -352,6 +399,9 @@ namespace ScpControl.Usb.Ds3
 
                 if (!IsFake)
                 {
+					if (_cal != null)
+						_cal.ApplyCalToOutReport(_hidReport);
+
                     SendTransfer(UsbHidRequestType.HostToDevice, UsbHidRequest.SetReport,
                         ToValue(UsbHidReportRequestType.Output, UsbHidReportRequestId.One),
                         _hidReport, ref transfered);
