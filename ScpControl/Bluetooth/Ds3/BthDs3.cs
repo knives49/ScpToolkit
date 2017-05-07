@@ -3,6 +3,7 @@ using System.Net.NetworkInformation;
 using System.Threading;
 using ScpControl.ScpCore;
 using ScpControl.Shared.Core;
+using ScpControl.Usb.Ds3;
 
 namespace ScpControl.Bluetooth.Ds3
 {
@@ -16,6 +17,8 @@ namespace ScpControl.Bluetooth.Ds3
         private byte _counterForLeds;
         private byte _ledStatus;
 
+		private DS3CalInstance _cal;
+
         #endregion
 
         #region Public methods
@@ -28,9 +31,19 @@ namespace ScpControl.Bluetooth.Ds3
             m_Queued = 1;
             m_Blocked = true;
             m_Last = DateTime.Now;
-            BluetoothDevice.HID_Command(HciHandle.Bytes, Get_SCID(L2CAP.PSM.HID_Command), _hidCommandEnable);
 
-            return base.Start();
+			if (IsFake)
+			{
+				BluetoothDevice.HID_Command(HciHandle.Bytes, Get_SCID(L2CAP.PSM.HID_Command), _hidCommandEnable); //immediately enable report sending
+				return base.Start();
+			}
+			else
+			{
+				BluetoothDevice.HID_Command(HciHandle.Bytes, Get_SCID(L2CAP.PSM.HID_Command), _eepromSetReport); //init eeprom read
+				BluetoothDevice.HID_Command(HciHandle.Bytes, Get_SCID(L2CAP.PSM.HID_Command), _eepromGetReport); //request eeprom contents
+				System.Diagnostics.Debug.WriteLine("EEPROM REQUESTED");
+				return true;
+			}            
         }
 
         /// <summary>
@@ -39,18 +52,52 @@ namespace ScpControl.Bluetooth.Ds3
         /// <param name="report">The HID report as byte array.</param>
         public override void ParseHidReport(byte[] report)
         {
+			if (report[8] == 0xA3) //feature report
+			{
+				byte featureId = report[9];
+				var payload = new byte[report.Length - 9];
+				Array.Copy(report, 9, payload, 0, payload.Length);
+				if (featureId == 239) //eeprom contents 
+				{
+					_cal = new DS3CalInstance(payload);
+					BluetoothDevice.HID_Command(HciHandle.Bytes, Get_SCID(L2CAP.PSM.HID_Command), _statusGetReport); //request version contents
+				}
+				else if (featureId == 1) //feature id 1 is version/status contents
+				{
+					if (_cal != null)
+					{
+						_cal.InitialCal(payload);
+
+						var outBuffer = new byte[50];
+						outBuffer[0] = _hidOutputReport[0];
+						outBuffer[1] = _hidOutputReport[1];
+						_cal.ApplyCalToOutReport(outBuffer, 2);
+						BluetoothDevice.HID_Command(HciHandle.Bytes, Get_SCID(L2CAP.PSM.HID_Command), outBuffer); //send initial cal value
+					}
+
+					BluetoothDevice.HID_Command(HciHandle.Bytes, Get_SCID(L2CAP.PSM.HID_Command), _hidCommandEnable); //enable report sending
+					base.Start(); //start output report thread
+				}
+
+				return;
+			}
+
             if (report[10] == 0xFF) return;
 
             m_PlugStatus = report[38];
             Battery = (DsBattery) report[39];
             m_CableStatus = report[40];
 
-            if (m_Packet == 0) Rumble(0, 0);
-            m_Packet++;
+            if (m_Packet++ == 0)
+				Rumble(0, 0);
 
             var inputReport = NewHidReport();
             
             inputReport.PacketCounter = m_Packet;
+
+			// convert accel/gyro values
+			if (_cal != null)
+				_cal.ApplyCalToInReport(report, 9);
 
             // copy controller data to report packet
             Buffer.BlockCopy(report, 9, inputReport.RawBytes, 8, 49);
@@ -238,6 +285,9 @@ namespace ScpControl.Bluetooth.Ds3
 
                 #endregion
 
+				if (_cal != null)
+					_cal.ApplyCalToOutReport(_hidOutputReport, 2);
+
                 if (m_Blocked || m_Queued <= 0) return;
 
                 if (!((now - m_Last).TotalMilliseconds >= GlobalConfiguration.Instance.Latency)) return;
@@ -258,50 +308,45 @@ namespace ScpControl.Bluetooth.Ds3
 
         #region HID Reports
 
-        private readonly byte[] _hidCommandEnable = {0x53, 0xF4, 0x42, 0x03, 0x00, 0x00};
+		private readonly byte[] _eepromSetReport =
+		{
+			0x53, 0xEF, //SET REPORT, FEATURE, ID 239
+			0x00, 0x00, 0x00, 0x00, 0x03, 0x01, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+		};
+		private readonly byte[] _eepromGetReport =
+		{
+			0x4B, 0xEF, //GET REPORT, FEATURE, ID 239
+			0x40, 0x00
+		};
+		private readonly byte[] _statusGetReport =
+		{
+			0x4B, 0x01, //GET REPORT, FEATURE, ID 1
+			0x31, 0x00
+		};
+		private readonly byte[] _inputGetReport =
+		{
+			0x41, 0x01, //GET REPORT, INPUT, ID 1
+		};
+		private readonly byte[] _hidCommandEnable = { 0x53, 0xF4, 0x42, 0x03, 0x00, 0x00 }; //SET REPORT, FEATURE, ID 244
 
         private readonly byte[][] _hidInitReport =
         {
-            new byte[] {0x02, 0x00, 0x0F, 0x00, 0x08, 0x35, 0x03, 0x19, 0x12, 0x00, 0x00, 0x03, 0x00},
-            new byte[]
-            {
-                0x04, 0x00, 0x10, 0x00, 0x0F, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x35, 0x06, 0x09, 0x02, 0x01, 0x09,
-                0x02,
-                0x02, 0x00
-            },
-            new byte[]
-            {0x06, 0x00, 0x11, 0x00, 0x0D, 0x35, 0x03, 0x19, 0x11, 0x24, 0x01, 0x90, 0x35, 0x03, 0x09, 0x02, 0x06, 0x00},
-            new byte[]
-            {
-                0x06, 0x00, 0x12, 0x00, 0x0F, 0x35, 0x03, 0x19, 0x11, 0x24, 0x01, 0x90, 0x35, 0x03, 0x09, 0x02, 0x06,
-                0x02,
-                0x00, 0x7F
-            },
-            new byte[]
-            {
-                0x06, 0x00, 0x13, 0x00, 0x0F, 0x35, 0x03, 0x19, 0x11, 0x24, 0x01, 0x90, 0x35, 0x03, 0x09, 0x02, 0x06,
-                0x02,
-                0x00, 0x59
-            },
-            new byte[]
-            {
-                0x06, 0x00, 0x14, 0x00, 0x0F, 0x35, 0x03, 0x19, 0x11, 0x24, 0x01, 0x80, 0x35, 0x03, 0x09, 0x02, 0x06,
-                0x02,
-                0x00, 0x33
-            },
-            new byte[]
-            {
-                0x06, 0x00, 0x15, 0x00, 0x0F, 0x35, 0x03, 0x19, 0x11, 0x24, 0x01, 0x90, 0x35, 0x03, 0x09, 0x02, 0x06,
-                0x02,
-                0x00, 0x0D
-            }
+            new byte[] { 0x02, 0x00, 0x0F, 0x00, 0x08, 0x35, 0x03, 0x19, 0x12, 0x00, 0x00, 0x03, 0x00 },
+            new byte[] { 0x04, 0x00, 0x10, 0x00, 0x0F, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x35, 0x06, 0x09, 0x02, 0x01, 0x09, 0x02, 0x02, 0x00 },
+            new byte[] { 0x06, 0x00, 0x11, 0x00, 0x0D, 0x35, 0x03, 0x19, 0x11, 0x24, 0x01, 0x90, 0x35, 0x03, 0x09, 0x02, 0x06, 0x00 },
+            new byte[] { 0x06, 0x00, 0x12, 0x00, 0x0F, 0x35, 0x03, 0x19, 0x11, 0x24, 0x01, 0x90, 0x35, 0x03, 0x09, 0x02, 0x06, 0x02, 0x00, 0x7F },
+            new byte[] { 0x06, 0x00, 0x13, 0x00, 0x0F, 0x35, 0x03, 0x19, 0x11, 0x24, 0x01, 0x90, 0x35, 0x03, 0x09, 0x02, 0x06, 0x02, 0x00, 0x59 },
+            new byte[] { 0x06, 0x00, 0x14, 0x00, 0x0F, 0x35, 0x03, 0x19, 0x11, 0x24, 0x01, 0x80, 0x35, 0x03, 0x09, 0x02, 0x06, 0x02, 0x00, 0x33 },
+            new byte[] { 0x06, 0x00, 0x15, 0x00, 0x0F, 0x35, 0x03, 0x19, 0x11, 0x24, 0x01, 0x90, 0x35, 0x03, 0x09, 0x02, 0x06, 0x02, 0x00, 0x0D }
         };
 
         private readonly byte[] _ledOffsets = {0x02, 0x04, 0x08, 0x10};
 
         private readonly byte[] _hidOutputReport =
         {
-            0x52, 0x01,
+            0x52, 0x01,	//SET REPORT, OUTPUT, ID 1
             0x00, 0xFF, 0x00, 0xFF, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00,
             0xFF, 0x27, 0x10, 0x00, 0x32,

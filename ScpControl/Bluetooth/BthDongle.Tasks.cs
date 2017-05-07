@@ -386,6 +386,8 @@ namespace ScpControl.Bluetooth
                             {
                                 connection.CanStartHid = true;
                                 connection.InitHidReport(packet.RawBytes);
+
+								Log.DebugFormat("<< INITHIDREPORT [CID: {0}]", packet.ChannelId);
                             }
                             break;
 
@@ -497,17 +499,28 @@ namespace ScpControl.Bluetooth
                 // HID report received, parse content and extract gamepad data
                 connection.ParseHidReport(packet.RawBytes);
             }
-            else if (connection.InitHidReport(packet.RawBytes))
-            {
-                connection.CanStartHid = true;
+			else if (packet.IsHidFeatureReport)
+			{
+				connection.ParseHidReport(packet.RawBytes);
+			}
+			else if (connection.InitHidReport(packet.RawBytes))
+			{
+				Log.DebugFormat("<< INITHIDREPORT2");
 
-                L2_DCID = connection.Get_DCID(L2CAP.PSM.HID_Service);
-                L2_SCID = connection.Get_SCID(L2CAP.PSM.HID_Service);
+				connection.CanStartHid = true;
 
-                L2CAP_Disconnection_Request(connection.HciHandle.Bytes, _l2CapDataIdentifier++, L2_SCID, L2_DCID);
+				L2_DCID = connection.Get_DCID(L2CAP.PSM.HID_Service);
+				L2_SCID = connection.Get_SCID(L2CAP.PSM.HID_Service);
 
-                Log.DebugFormat("<< {0}", L2CAP.Code.L2CAP_Disconnection_Request);
-            }
+				L2CAP_Disconnection_Request(connection.HciHandle.Bytes, _l2CapDataIdentifier++, L2_SCID, L2_DCID);
+
+				Log.DebugFormat("<< {0}", L2CAP.Code.L2CAP_Disconnection_Request);
+			}
+			else
+			{
+				string hex = BitConverter.ToString(packet.RawBytes);
+				System.Diagnostics.Debug.WriteLine(hex.Replace("-", " "));
+			}
         }
 
         /// <summary>

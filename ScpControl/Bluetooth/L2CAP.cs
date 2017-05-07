@@ -184,8 +184,12 @@ namespace ScpControl.Bluetooth
         /// </summary>
         public bool IsHidInputReport
         {
-            get { return (RawBytes[8] == 0xA1 && RawBytes[9] == 0x01); }
+            get { return (RawBytes[8] == 0xA1 && RawBytes[9] == 0x01); } //DATA HIDP type with 1 (Input) Parameter, first payload byte is report id (1)
         }
+		public bool IsHidFeatureReport
+		{
+			get { return (RawBytes[8] == 0xA3); } //DATA HIDP type with 3 (Feature parameter)
+		}
 
         /// <summary>
         ///     The current packets Signalling Command Code.
