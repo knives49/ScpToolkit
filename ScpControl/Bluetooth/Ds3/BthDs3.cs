@@ -5,6 +5,7 @@ using ScpControl.ScpCore;
 using ScpControl.Shared.Core;
 using ScpControl.Usb.Ds3;
 using ScpControl.Database;
+using ScpControl.Utilities;
 
 namespace ScpControl.Bluetooth.Ds3
 {
@@ -28,9 +29,9 @@ namespace ScpControl.Bluetooth.Ds3
             CanStartHid = false;
             State = DsState.Connected;
 
+			byte[] eepromContents = null, statusContents = null;
 			using (var db = new ScpDb())
 			{
-				byte[] eepromContents = null, statusContents = null;
 				using (var tran = db.Engine.GetTransaction())
 				{
 					var row = tran.Select<byte[],byte[]>(ScpDb.TableDS3Data, DeviceAddress.GetAddressBytes());
@@ -43,17 +44,17 @@ namespace ScpControl.Bluetooth.Ds3
 						Array.Copy(rowData, 0, eepromContents, 0, eepromContents.Length);
 						Array.Copy(rowData, eepromContents.Length, statusContents, 0, statusContents.Length);
 					}
-					else if (!IsFake)
-					{
-						Log.WarnFormat("Motion calibration data for DS3 controller {0} not present, please connect it via USB first!", DeviceAddress.ToString());
-					}
 				}
-
-				_cal = new DS3CalInstance(eepromContents);
-				_cal.InitialCal(statusContents);
 			}
 
-            m_Queued = 1;
+			//will work with nulls, just will load defaults
+			_cal = new DS3CalInstance(DeviceAddress, eepromContents);
+			_cal.InitialCal(statusContents);
+			
+			if (!IsFake && (eepromContents == null || statusContents == null))
+				Log.WarnFormat("Motion calibration data for DS3 controller {0} not present, please connect it via USB first!", DeviceAddress.AsFriendlyName());
+
+			m_Queued = 1;
             m_Blocked = true;
             m_Last = DateTime.Now;
             BluetoothDevice.HID_Command(HciHandle.Bytes, Get_SCID(L2CAP.PSM.HID_Command), _hidCommandEnable);

@@ -151,7 +151,7 @@ namespace ScpControl.Usb.Ds3
 						transfered = buffer.Length;
 						if (SendTransfer(UsbHidRequestType.DeviceToHost, UsbHidRequest.GetReport, 0x03EF, buffer, ref transfered) && transfered >= 49)
 						{
-							_cal = new DS3CalInstance(buffer);
+							_cal = new DS3CalInstance(DeviceAddress, buffer);
 							var eepromBuffer = buffer;
 
 							//read version

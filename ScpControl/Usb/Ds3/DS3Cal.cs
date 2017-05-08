@@ -1,6 +1,11 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using ScpControl.Driver;
+using System.Net.NetworkInformation;
+using ScpControl.Utilities;
+using ScpControl.Database;
+using log4net;
+using System.Reflection;
 
 namespace ScpControl.Usb.Ds3
 {
@@ -63,6 +68,16 @@ namespace ScpControl.Usb.Ds3
 			return RuntimeGyroCal(gottenGyroVal, out outGyroVal, out outCalVal, gyroStructPtr);
 		}
 
+		internal bool Store(IntPtr gyroStructPtr, byte[] outBuffer, out int outLen)
+		{
+			return GyroCalStore(gyroStructPtr, outBuffer, out outLen) == 0;
+		}
+
+		internal bool Load(IntPtr gyroStructPtr, byte[] srcBuffer, out int calWord)
+		{
+			return GyroCalLoad(gyroStructPtr, srcBuffer, out calWord) == 0;
+		}
+
 		#region P/Invoke
 
 		[DllImport("ds3cal.dll", CallingConvention = CallingConvention.StdCall)]
@@ -71,17 +86,27 @@ namespace ScpControl.Usb.Ds3
 		[DllImport("ds3cal.dll", CallingConvention = CallingConvention.StdCall)]
 		private static extern int RuntimeGyroCal(ushort gottenGyroVal, out ushort outGyroVal, out byte outCalVal, IntPtr gyroStructPtr);
 
+		[DllImport("ds3cal.dll", CallingConvention = CallingConvention.StdCall)]
+		private static extern int GyroCalStore(IntPtr gyroStructPtr, [Out] byte[] outBuffer, out int outLen);
+
+		[DllImport("ds3cal.dll", CallingConvention = CallingConvention.StdCall)]
+		private static extern int GyroCalLoad(IntPtr gyroStructPtr, [In] byte[] srcBuffer, out int calWord);
+
 		#endregion
 	}
 
 	public class DS3CalInstance
 	{
+		protected static readonly ILog Log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+
 		private IntPtr _gyroStruct = IntPtr.Zero;
 		private DS3CalData _calValues;
 		private int _setReportFlags = 0;
-		private byte _setReportCalByte = 0x80;
-
-		public DS3CalInstance(byte[] eepromContents)
+		private byte _setReportCalByte = 0x7B;
+		private PhysicalAddress _deviceAddr;
+		private byte _lastCalByteSaved;
+		
+		public DS3CalInstance(PhysicalAddress macAddr, byte[] eepromContents)
 		{
 			int structSize;
 			if (Environment.Is64BitProcess)
@@ -94,6 +119,8 @@ namespace ScpControl.Usb.Ds3
 				Marshal.WriteInt32(_gyroStruct, i, 0);
 
 			_calValues = new DS3CalData(eepromContents);
+			_deviceAddr = macAddr;
+			_lastCalByteSaved = 0;
 		}
 
 		~DS3CalInstance()
@@ -107,12 +134,37 @@ namespace ScpControl.Usb.Ds3
 			}
 		}
 
+		public byte[] StateToBytes()
+		{
+			int reqLen = 0;
+			DS3CalLibrary.Instance.Store(_gyroStruct,null,out reqLen);
+			if (reqLen == 0)
+				return null;
+
+			var outBytes = new byte[reqLen];
+			int storedLen = 0;
+			if (!DS3CalLibrary.Instance.Store(_gyroStruct, outBytes, out storedLen) || storedLen != reqLen)
+				return null;
+
+			return outBytes;
+		}
+
+		public bool StateFromBytes(byte[] srcBuf, out byte loadedCalByte)
+		{
+			int tempCalWord = 0;
+			var retVal = DS3CalLibrary.Instance.Load(_gyroStruct, srcBuf, out tempCalWord);
+			loadedCalByte = (byte)tempCalWord;
+			return retVal;
+		}
+
 		public int InitialCal(byte[] buffer)
 		{
 			if (buffer == null) //default values
 			{
 				_setReportFlags = 0x38; //theres no way to get this right without status bytes
-				return DS3CalLibrary.Instance.InitialCal((ushort)_calValues.G.val2, (ushort)_calValues.G.val1, out _setReportCalByte, _gyroStruct);
+				var retVal = DS3CalLibrary.Instance.InitialCal((ushort)_calValues.G.val2, (ushort)_calValues.G.val1, out _setReportCalByte, _gyroStruct);
+				_lastCalByteSaved = _setReportCalByte;
+				return retVal;
 			}
 
 			_setReportFlags = 0;
@@ -124,6 +176,7 @@ namespace ScpControl.Usb.Ds3
 				(buffer[idxCalibBytes + 1] != 1 || buffer[idxCalibBytes + 2] != 2))
 			{
 				var retVal = DS3CalLibrary.Instance.InitialCal((ushort)_calValues.G.val2, (ushort)_calValues.G.val1, out _setReportCalByte, _gyroStruct);
+				_lastCalByteSaved = _setReportCalByte;
 				if (retVal != 0)
 					return retVal;
 			}
@@ -142,7 +195,35 @@ namespace ScpControl.Usb.Ds3
 				if (buffer[bufIdx] == 7)
 				{
 					_setReportFlags |= 0x30;
-					return DS3CalLibrary.Instance.InitialCal((ushort)_calValues.G.val2, (ushort)_calValues.G.val1, out _setReportCalByte, _gyroStruct);
+					var retVal = DS3CalLibrary.Instance.InitialCal((ushort)_calValues.G.val2, (ushort)_calValues.G.val1, out _setReportCalByte, _gyroStruct);
+					_lastCalByteSaved = _setReportCalByte;
+					if (retVal != 0)
+						return retVal;
+
+					break;
+				}
+			}
+
+			//speed up calibration by loading existing cal state if it exists
+			byte[] calBytes = null;
+			using (var db = new ScpDb())		
+			{
+				using (var tran = db.Engine.GetTransaction())
+				{
+					var dataRow = tran.Select<byte[], byte[]>(ScpDb.TableDS3Cal, _deviceAddr.GetAddressBytes());
+					if (dataRow.Exists)
+						calBytes = dataRow.Value;
+				}
+			}
+			if (calBytes != null)
+			{
+				byte loadedCalByte = 0;
+				if (StateFromBytes(calBytes,out loadedCalByte))
+				{
+					_setReportCalByte = loadedCalByte;
+					_lastCalByteSaved = loadedCalByte;
+					
+					Log.InfoFormat("Loaded cal data for {0} cal byte now 0x{1}",_deviceAddr.AsFriendlyName(),loadedCalByte.ToString("X"));
 				}
 			}
 
@@ -164,7 +245,7 @@ namespace ScpControl.Usb.Ds3
 			}
 		}
 
-		public void ApplyCalToInReport(byte[] inputReport, int startOffs=0)
+		public void ApplyCalToInReport(byte[] inputReport, int startOffs = 0)
 		{
 			int idx = startOffs + 0x29;
 			for (int i=0; i<3; i++) //accelerometer vals
@@ -230,6 +311,32 @@ namespace ScpControl.Usb.Ds3
 				if (DS3CalLibrary.Instance.RuntimeCal((ushort)gyroVal,out outGyroVal,out outCalByte,_gyroStruct) == 0)
 				{
 					_setReportCalByte = outCalByte;
+					if (outCalByte != _lastCalByteSaved) //the calculated value isnt the same as the last stored one
+					{
+						bool calDataUpdated = false;
+						using (var db = new ScpDb())
+						{
+							var addrBytes = _deviceAddr.GetAddressBytes();
+							using (var tran = db.Engine.GetTransaction())
+							{
+								var dataRow = tran.Select<byte[], byte[]>(ScpDb.TableDS3Data, addrBytes);
+								if (dataRow.Exists) //dont save cal data if we dont have eeprom data, so we dont resume with false info
+								{
+									var calBytes = StateToBytes();
+									if (calBytes != null)
+									{
+										tran.Insert(ScpDb.TableDS3Cal, _deviceAddr.GetAddressBytes(), calBytes);
+										tran.Commit();
+										calDataUpdated = true;
+									}
+								}
+							}
+						}
+						if (calDataUpdated)
+							Log.InfoFormat("Stored cal data for {0} new cal byte is 0x{1}",_deviceAddr.AsFriendlyName(),outCalByte.ToString("X"));
+
+						_lastCalByteSaved = outCalByte;
+					}
 				}
 			}
 			if ((_setReportFlags & 0x20) != 0)
