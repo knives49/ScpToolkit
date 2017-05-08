@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ScpControl.Shared.Utilities;
+using System;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Reflection;
@@ -223,8 +224,8 @@ namespace ScpControl.Shared.Core
 						return new DsAccelerometer
 						{
 							X = (short)((RawBytes[0x2A + 8] << 8) | RawBytes[0x29 + 8]),
-							Y = (short)((RawBytes[0x2C + 8] << 8) | RawBytes[0x2B + 8]),
-							Z = (short)((RawBytes[0x2E + 8] << 8) | RawBytes[0x2D + 8])
+							Z = (short)((RawBytes[0x2C + 8] << 8) | RawBytes[0x2B + 8]),
+							Y = (short)((RawBytes[0x2E + 8] << 8) | RawBytes[0x2D + 8])
 						};
                     case DsModel.DS4:
                         return new DsAccelerometer

@@ -52,7 +52,7 @@ namespace ScpControl.Bluetooth.Ds3
 			_cal.InitialCal(statusContents);
 			
 			if (!IsFake && (eepromContents == null || statusContents == null))
-				Log.WarnFormat("Motion calibration data for DS3 controller {0} not present, please connect it via USB first!", DeviceAddress.AsFriendlyName());
+				Log.WarnFormat("EEPROM data for DS3 controller {0} not present, please connect it via USB first!", DeviceAddress.AsFriendlyName());
 
 			m_Queued = 1;
             m_Blocked = true;
