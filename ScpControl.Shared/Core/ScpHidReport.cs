@@ -215,7 +215,7 @@ namespace ScpControl.Shared.Core
         /// </summary>
 		/// <remarks>
 		///			http://eleccelerator.com/wiki/index.php?title=DualShock_3 (off by one and mistaken endianness)
-		///			https://github.com/ehd/node-ds4/blob/master/index.js
+		///			https://github.com/RPCS3/rpcs3/blob/master/rpcs3/DS4PadHandler.cpp
 		///	</remarks>
         public DsAccelerometer Motion
         {
@@ -233,9 +233,9 @@ namespace ScpControl.Shared.Core
                     case DsModel.DS4:
                         return new DsAccelerometer
                         {
-                            Y = (short) ((RawBytes[22] << 8) | RawBytes[21]),
-                            X = (short) -((RawBytes[24] << 8) | RawBytes[23]),
-                            Z = (short) -((RawBytes[26] << 8) | RawBytes[25])
+							X = (short)-(((ushort)RawBytes[20 + 8] << 8) | (ushort)RawBytes[19 + 8]),
+							Y = (short)-(((ushort)RawBytes[22 + 8] << 8) | (ushort)RawBytes[21 + 8]),
+							Z = (short)-(((ushort)RawBytes[24 + 8] << 8) | (ushort)RawBytes[23 + 8])
                         };
                 }
 
@@ -248,7 +248,7 @@ namespace ScpControl.Shared.Core
         /// </summary>
 		/// <remarks>
 		///			http://eleccelerator.com/wiki/index.php?title=DualShock_3 (off by one and mistaken endianness) 
-		///			https://github.com/ehd/node-ds4/blob/master/index.js
+		///			https://github.com/RPCS3/rpcs3/blob/master/rpcs3/DS4PadHandler.cpp
 		///	</remarks>
         public DsGyroscope Orientation
         {
@@ -266,9 +266,9 @@ namespace ScpControl.Shared.Core
                     case DsModel.DS4:
                         return new DsGyroscope
                         {
-                            Roll = (short) -((RawBytes[28] << 8) | RawBytes[27]),
-                            Yaw = (short) ((RawBytes[30] << 8) | RawBytes[29]),
-                            Pitch = (short) ((RawBytes[32] << 8) | RawBytes[31])
+							Pitch = (short) (((ushort)RawBytes[14 + 8] << 8) | (ushort)RawBytes[13 + 8]),
+							Yaw =	(short)-(((ushort)RawBytes[16 + 8] << 8) | (ushort)RawBytes[15 + 8]),
+							Roll =	(short)-(((ushort)RawBytes[18 + 8] << 8) | (ushort)RawBytes[17 + 8])                            
                         };
                 }
 
