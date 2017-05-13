@@ -68,14 +68,24 @@ namespace ScpControl.Usb.Ds3
 			return RuntimeGyroCal(gottenGyroVal, out outGyroVal, out outCalVal, gyroStructPtr);
 		}
 
-		internal bool Store(IntPtr gyroStructPtr, byte[] outBuffer, out int outLen)
+		internal bool CalStore(IntPtr gyroStructPtr, byte[] outBuffer, out int outLen)
 		{
 			return GyroCalStore(gyroStructPtr, outBuffer, out outLen) == 0;
 		}
 
-		internal bool Load(IntPtr gyroStructPtr, byte[] srcBuffer, out int calWord)
+		internal bool CalLoad(IntPtr gyroStructPtr, byte[] srcBuffer, out int calWord)
 		{
 			return GyroCalLoad(gyroStructPtr, srcBuffer, out calWord) == 0;
+		}
+
+		internal IntPtr CalCreate()
+		{
+			return GyroCalCreate();
+		}
+
+		internal void CalDestroy(IntPtr gyroStructPtr)
+		{
+			GyroCalDestroy(gyroStructPtr);
 		}
 
 		#region P/Invoke
@@ -92,6 +102,12 @@ namespace ScpControl.Usb.Ds3
 		[DllImport("ds3cal.dll", CallingConvention = CallingConvention.StdCall)]
 		private static extern int GyroCalLoad(IntPtr gyroStructPtr, [In] byte[] srcBuffer, out int calWord);
 
+		[DllImport("ds3cal.dll", CallingConvention = CallingConvention.StdCall)]
+		private static extern IntPtr GyroCalCreate();
+
+		[DllImport("ds3cal.dll", CallingConvention = CallingConvention.StdCall)]
+		private static extern void GyroCalDestroy(IntPtr gyroStructPtr);
+
 		#endregion
 	}
 
@@ -102,21 +118,13 @@ namespace ScpControl.Usb.Ds3
 		private IntPtr _gyroStruct = IntPtr.Zero;
 		private DS3CalData _calValues;
 		private int _setReportFlags = 0;
-		private byte _setReportCalByte = 0x7B;
+		private byte _setReportCalByte = 0;
 		private PhysicalAddress _deviceAddr;
 		private byte _lastCalByteSaved;
 		
 		public DS3CalInstance(PhysicalAddress macAddr, byte[] eepromContents)
 		{
-			int structSize;
-			if (Environment.Is64BitProcess)
-				structSize = 0xD0;
-			else
-				structSize = 0xC4;
-
-			_gyroStruct = Marshal.AllocHGlobal(structSize);
-			for (int i = 0; i < structSize; i += sizeof(uint))
-				Marshal.WriteInt32(_gyroStruct, i, 0);
+			_gyroStruct = DS3CalLibrary.Instance.CalCreate();
 
 			_calValues = new DS3CalData(eepromContents);
 			_deviceAddr = macAddr;
@@ -129,7 +137,7 @@ namespace ScpControl.Usb.Ds3
 
 			if (_gyroStruct != IntPtr.Zero)
 			{
-				Marshal.FreeHGlobal(_gyroStruct);
+				DS3CalLibrary.Instance.CalDestroy(_gyroStruct);
 				_gyroStruct = IntPtr.Zero;
 			}
 		}
@@ -137,13 +145,13 @@ namespace ScpControl.Usb.Ds3
 		public byte[] StateToBytes()
 		{
 			int reqLen = 0;
-			DS3CalLibrary.Instance.Store(_gyroStruct,null,out reqLen);
+			DS3CalLibrary.Instance.CalStore(_gyroStruct,null,out reqLen);
 			if (reqLen == 0)
 				return null;
 
 			var outBytes = new byte[reqLen];
 			int storedLen = 0;
-			if (!DS3CalLibrary.Instance.Store(_gyroStruct, outBytes, out storedLen) || storedLen != reqLen)
+			if (!DS3CalLibrary.Instance.CalStore(_gyroStruct, outBytes, out storedLen) || storedLen != reqLen)
 				return null;
 
 			return outBytes;
@@ -152,7 +160,7 @@ namespace ScpControl.Usb.Ds3
 		public bool StateFromBytes(byte[] srcBuf, out byte loadedCalByte)
 		{
 			int tempCalWord = 0;
-			var retVal = DS3CalLibrary.Instance.Load(_gyroStruct, srcBuf, out tempCalWord);
+			var retVal = DS3CalLibrary.Instance.CalLoad(_gyroStruct, srcBuf, out tempCalWord);
 			loadedCalByte = (byte)tempCalWord;
 			return retVal;
 		}
@@ -161,7 +169,7 @@ namespace ScpControl.Usb.Ds3
 		{
 			if (buffer == null) //default values
 			{
-				_setReportFlags = 0x38; //theres no way to get this right without status bytes
+				_setReportFlags = 0x18; //theres no way to get this right without status bytes, most common i guess
 				var retVal = DS3CalLibrary.Instance.InitialCal((ushort)_calValues.G.val2, (ushort)_calValues.G.val1, out _setReportCalByte, _gyroStruct);
 				_lastCalByteSaved = _setReportCalByte;
 				return retVal;
