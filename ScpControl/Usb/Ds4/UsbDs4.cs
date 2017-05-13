@@ -220,6 +220,9 @@ namespace ScpControl.Usb.Ds4
             return false;
         }
 
+		private int _prevReportTimestamp = -1;
+		private long _prevFullTime = 0;
+
         /// <summary>
         ///     Interprets a HID report sent by a DualShock 4 device.
         /// </summary>
@@ -274,6 +277,23 @@ namespace ScpControl.Usb.Ds4
 
             // copy controller data to report packet
             Buffer.BlockCopy(report, 0, inputReport.RawBytes, 8, 64);
+
+			// convert wrapped time to absolute time
+			var timestamp = (ushort)inputReport.Timestamp;
+			if (_prevReportTimestamp < 0) //first one, start from zero
+				inputReport.Timestamp = ((uint)timestamp * 16) / 3;				
+			else
+			{
+				ushort delta;
+				if (_prevReportTimestamp > timestamp) //wrapped around
+					delta = (ushort)(ushort.MaxValue - _prevReportTimestamp + timestamp + 1);
+				else
+					delta = (ushort)(timestamp - _prevReportTimestamp);
+
+				inputReport.Timestamp = _prevFullTime + (((uint)delta * 16) / 3);
+			}
+			_prevReportTimestamp = timestamp;
+			_prevFullTime = inputReport.Timestamp;
 
             OnHidReportReceived(inputReport);
         }

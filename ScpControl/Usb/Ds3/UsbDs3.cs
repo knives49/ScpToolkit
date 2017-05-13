@@ -8,6 +8,7 @@ using ScpControl.ScpCore;
 using ScpControl.Shared.Core;
 using ScpControl.Utilities;
 using ScpControl.Database;
+using ScpControl.Shared.Utilities;
 
 namespace ScpControl.Usb.Ds3
 {
@@ -299,6 +300,7 @@ namespace ScpControl.Usb.Ds3
             // report ID must be 1
             if (report[0] != 0x01) return;
 
+			AccurateTime currentTime = AccurateTime.Now;
             PacketCounter++;
 
             var inputReport = NewHidReport();
@@ -315,6 +317,9 @@ namespace ScpControl.Usb.Ds3
 
             // copy controller data to report packet
             Buffer.BlockCopy(report, 0, inputReport.RawBytes, 8, 49);
+
+			// DS3 does not have timestamp in reports, so just give system time
+			inputReport.Timestamp = (long)Math.Round(currentTime.ToSeconds() * 1000000); //convert from s to us
 
             var trigger = false;
 

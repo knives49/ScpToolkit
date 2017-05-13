@@ -126,7 +126,7 @@ namespace ScpControl.Shared.Core
             set
             {
                 if (value != null)
-                    Buffer.BlockCopy(value.GetAddressBytes(), 0, RawBytes, 90, 6);
+					Buffer.BlockCopy(value.GetAddressBytes(), 0, RawBytes, RawBytes.Length - 6, 6);
             }
         }
 
@@ -210,12 +210,80 @@ namespace ScpControl.Shared.Core
             }
         }
 
+		public long Timestamp //in us
+		{
+			get
+			{
+				int lastUsedIdx = RawBytes.Length - 6 - 2; //model and index use 2 more
+				int currIdx = lastUsedIdx;
+				ulong retVal = 0;
+				switch (Model)
+				{
+					case DsModel.DS3: //have enough free space in the 96-6 byte report (only 8+49 used) to just store it as 8 bytes
+						{	
+							retVal |= ((ulong)RawBytes[--currIdx]) << 56;
+							retVal |= ((ulong)RawBytes[--currIdx]) << 48;
+							retVal |= ((ulong)RawBytes[--currIdx]) << 40;
+							retVal |= ((ulong)RawBytes[--currIdx]) << 32;
+							retVal |= ((ulong)RawBytes[--currIdx]) << 24;
+							retVal |= ((ulong)RawBytes[--currIdx]) << 16;
+							retVal |= ((ulong)RawBytes[--currIdx]) <<  8;
+							retVal |= ((ulong)RawBytes[--currIdx]) <<  0;
+						} break;
+					case DsModel.DS4: //only have 4 bytes left after pad data (76+8 used) so reuse the 2 original timestamp bytes as LSB
+						{
+							retVal |= ((ulong)RawBytes[--currIdx]) << 40;
+							retVal |= ((ulong)RawBytes[--currIdx]) << 32;
+							retVal |= ((ulong)RawBytes[--currIdx]) << 24;
+							retVal |= ((ulong)RawBytes[--currIdx]) << 16;
+
+							currIdx = (10 + 8) + 2; //just after the original timestamp
+							retVal |= ((ulong)RawBytes[--currIdx]) <<  8;
+							retVal |= ((ulong)RawBytes[--currIdx]) <<  0;
+						} break;
+				}
+
+				return (long)retVal;
+			}
+			set 
+			{
+				ulong val = (ulong)value;
+				int lastUsedIdx = RawBytes.Length - 6 - 2;
+				int currIdx = lastUsedIdx;
+				switch (Model)
+				{
+					case DsModel.DS3:
+						{							
+							RawBytes[--currIdx] = (byte)(val >> 56);
+							RawBytes[--currIdx] = (byte)(val >> 48);
+							RawBytes[--currIdx] = (byte)(val >> 40);
+							RawBytes[--currIdx] = (byte)(val >> 32);
+							RawBytes[--currIdx] = (byte)(val >> 24);
+							RawBytes[--currIdx] = (byte)(val >> 16);
+							RawBytes[--currIdx] = (byte)(val >> 8);
+							RawBytes[--currIdx] = (byte)(val >> 0);
+						} break;
+					case DsModel.DS4:
+						{
+							RawBytes[--currIdx] = (byte)(val >> 40);
+							RawBytes[--currIdx] = (byte)(val >> 32);
+							RawBytes[--currIdx] = (byte)(val >> 24);
+							RawBytes[--currIdx] = (byte)(val >> 16);
+
+							currIdx = (10 + 8) + 2;
+							RawBytes[--currIdx] = (byte)(val >>  8);
+							RawBytes[--currIdx] = (byte)(val >>  0);
+						} break;
+				}
+			}
+		}
+
         /// <summary>
         ///     Gets the motion data from the DualShock accelerometer sensor.
         /// </summary>
 		/// <remarks>
 		///			http://eleccelerator.com/wiki/index.php?title=DualShock_3 (off by one and mistaken endianness)
-		///			https://github.com/RPCS3/rpcs3/blob/master/rpcs3/DS4PadHandler.cpp
+		///			http://www.psdevwiki.com/ps4/DS4-USB
 		///	</remarks>
         public DsAccelerometer Motion
         {
@@ -248,7 +316,7 @@ namespace ScpControl.Shared.Core
         /// </summary>
 		/// <remarks>
 		///			http://eleccelerator.com/wiki/index.php?title=DualShock_3 (off by one and mistaken endianness) 
-		///			https://github.com/RPCS3/rpcs3/blob/master/rpcs3/DS4PadHandler.cpp
+		///			http://www.psdevwiki.com/ps4/DS4-USB
 		///	</remarks>
         public DsGyroscope Orientation
         {

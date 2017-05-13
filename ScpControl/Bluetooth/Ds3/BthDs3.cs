@@ -6,6 +6,7 @@ using ScpControl.Shared.Core;
 using ScpControl.Usb.Ds3;
 using ScpControl.Database;
 using ScpControl.Utilities;
+using ScpControl.Shared.Utilities;
 
 namespace ScpControl.Bluetooth.Ds3
 {
@@ -71,6 +72,7 @@ namespace ScpControl.Bluetooth.Ds3
         public override void ParseHidReport(byte[] report)
         {
             if (report[10] == 0xFF) return;
+			AccurateTime currentTime = AccurateTime.Now;
 
             m_PlugStatus = report[38];
             Battery = (DsBattery) report[39];
@@ -89,6 +91,9 @@ namespace ScpControl.Bluetooth.Ds3
 
             // copy controller data to report packet
             Buffer.BlockCopy(report, 9, inputReport.RawBytes, 8, 49);
+
+			// DS3 does not have timestamp in reports, so just give system time
+			inputReport.Timestamp = (long)Math.Round(currentTime.ToSeconds() * 1000000); //convert from s to us
 
             var trigger = false;
 

@@ -122,6 +122,9 @@ namespace ScpControl.Bluetooth.Ds4
             return base.Start();
         }
 
+		private int _prevReportTimestamp = -1;
+		private long _prevFullTime = 0;
+
         /// <summary>
         ///     Interprets a HID report sent by a DualShock 4 device.
         /// </summary>
@@ -173,6 +176,23 @@ namespace ScpControl.Bluetooth.Ds4
 
             // copy controller data to report packet
             Buffer.BlockCopy(report, 11, inputReport.RawBytes, 8, 76);
+
+			// convert wrapped time to absolute time
+			var timestamp = (ushort)inputReport.Timestamp;
+			if (_prevReportTimestamp < 0) //first one, start from zero
+				inputReport.Timestamp = ((uint)timestamp * 16) / 3;
+			else
+			{
+				ushort delta;
+				if (_prevReportTimestamp > timestamp) //wrapped around
+					delta = (ushort)(ushort.MaxValue - _prevReportTimestamp + timestamp + 1);
+				else
+					delta = (ushort)(timestamp - _prevReportTimestamp);
+
+				inputReport.Timestamp = _prevFullTime + (((uint)delta * 16) / 3);
+			}
+			_prevReportTimestamp = timestamp;
+			_prevFullTime = inputReport.Timestamp;
 
             // set report ID
             inputReport.RawBytes[8] = report[9];
