@@ -289,12 +289,9 @@ namespace ScpControl.Usb.Ds3
 					axisVal = (uint)acc;
 				}
 
-				if (i == 0) //invert X sign
-					axisVal = 1023 - axisVal;
-
-				//put it back into the input report, now as little endian
-				inputReport[idx + 0] = (byte)((axisVal >> 0) & 0xFF);
-				inputReport[idx + 1] = (byte)((axisVal >> 8) & 0x3F);
+				//put it back into the input report, also as big endian
+				inputReport[idx + 0] = (byte)((axisVal >> 8) & 0x3F);
+				inputReport[idx + 1] = (byte)((axisVal >> 0) & 0xFF);				
 				idx += 2;
 			}
 
@@ -361,9 +358,9 @@ namespace ScpControl.Usb.Ds3
 				gyroVal = (uint)gVal;
 			}
 
-			//put it back into the input report, now as little endian
-			inputReport[idx + 0] = (byte)((gyroVal >> 0) & 0xFF);
-			inputReport[idx + 1] = (byte)((gyroVal >> 8) & 0x3F);
+			//put it back into the input report, also as big endian
+			inputReport[idx + 0] = (byte)((gyroVal >> 8) & 0x3F);
+			inputReport[idx + 1] = (byte)((gyroVal >> 0) & 0xFF);			
 			idx += 2;
 		}
 	}

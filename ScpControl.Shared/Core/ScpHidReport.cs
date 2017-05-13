@@ -213,7 +213,10 @@ namespace ScpControl.Shared.Core
         /// <summary>
         ///     Gets the motion data from the DualShock accelerometer sensor.
         /// </summary>
-        /// <remarks>https://github.com/ehd/node-ds4/blob/master/index.js</remarks>
+		/// <remarks>
+		///			http://eleccelerator.com/wiki/index.php?title=DualShock_3 (off by one and mistaken endianness)
+		///			https://github.com/ehd/node-ds4/blob/master/index.js
+		///	</remarks>
         public DsAccelerometer Motion
         {
             get
@@ -223,9 +226,9 @@ namespace ScpControl.Shared.Core
                     case DsModel.DS3:
 						return new DsAccelerometer
 						{
-							X = (short)((RawBytes[0x2A + 8] << 8) | RawBytes[0x29 + 8]),
-							Z = (short)((RawBytes[0x2C + 8] << 8) | RawBytes[0x2B + 8]),
-							Y = (short)((RawBytes[0x2E + 8] << 8) | RawBytes[0x2D + 8])
+							X = (short)(1023 -	(((ushort)RawBytes[41 + 8] << 8) | (ushort)RawBytes[42 + 8])), //negated
+							Z = (short)			(((ushort)RawBytes[43 + 8] << 8) | (ushort)RawBytes[44 + 8]), 
+							Y = (short)			(((ushort)RawBytes[45 + 8] << 8) | (ushort)RawBytes[46 + 8]) //Y is gravity, which appears here
 						};
                     case DsModel.DS4:
                         return new DsAccelerometer
@@ -243,7 +246,10 @@ namespace ScpControl.Shared.Core
         /// <summary>
         ///     Gets the orientation data from the DualShock gyroscope sensor.
         /// </summary>
-        /// <remarks>https://github.com/ehd/node-ds4/blob/master/index.js</remarks>
+		/// <remarks>
+		///			http://eleccelerator.com/wiki/index.php?title=DualShock_3 (off by one and mistaken endianness) 
+		///			https://github.com/ehd/node-ds4/blob/master/index.js
+		///	</remarks>
         public DsGyroscope Orientation
         {
             get
@@ -254,7 +260,7 @@ namespace ScpControl.Shared.Core
 						return new DsGyroscope
 						{
 							Roll = 0,
-							Yaw = (short)((RawBytes[0x30 + 8] << 8) | RawBytes[0x2F + 8]),
+							Yaw = (short)(((ushort)RawBytes[47 + 8] << 8) | (ushort)RawBytes[48 + 8]),
 							Pitch = 0
 						};
                     case DsModel.DS4:
