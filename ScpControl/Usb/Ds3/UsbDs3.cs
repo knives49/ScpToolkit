@@ -32,8 +32,8 @@ namespace ScpControl.Usb.Ds3
 
         private readonly byte[] _hidReport =
         {
-            0x00, 0xFF, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0xFF,
+            0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00,
             0xFF, 0x27, 0x10, 0x00, 0x32,
             0xFF, 0x27, 0x10, 0x00, 0x32,
             0xFF, 0x27, 0x10, 0x00, 0x32,
@@ -195,6 +195,7 @@ namespace ScpControl.Usb.Ds3
 				{
 					//send initial cal value
 					var outBuffer = new byte[48];
+					outBuffer[9] = 0xFF;
 					_cal.ApplyCalToOutReport(outBuffer);
 
 					if (SendTransfer(UsbHidRequestType.HostToDevice, UsbHidRequest.SetReport,
@@ -234,11 +235,21 @@ namespace ScpControl.Usb.Ds3
             {
                 var transfered = 0;
 
+				//zero out marker and value bytes for rumble first
+				_hidReport[1] = 0;
+				_hidReport[2] = 0;
+				_hidReport[3] = 0;
+				_hidReport[4] = 0;
+
 				if (_cal != null)
 					_cal.ApplyCalToOutReport(_hidReport);
 
 				if (_hidReport[3] != 0xFF) //if not already used for motion cal
 				{
+					//set marker bytes for rumble
+					_hidReport[1] = 0xFF;
+					_hidReport[3] = 0xFF;
+
 					if (GlobalConfiguration.Instance.DisableRumble)
 					{
 						_hidReport[2] = 0;

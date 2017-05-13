@@ -133,11 +133,21 @@ namespace ScpControl.Bluetooth.Ds3
         {
             lock (_hidOutputReport)
             {
+				//zero out marker and value bytes for rumble first
+				_hidOutputReport[3] = 0;
+				_hidOutputReport[4] = 0;
+				_hidOutputReport[5] = 0;
+				_hidOutputReport[6] = 0;
+
 				if (_cal != null)
 					_cal.ApplyCalToOutReport(_hidOutputReport, 2);
 
 				if (_hidOutputReport[5] != 0xFF) //if not already used for cal
 				{
+					//set marker bytes for rumble
+					_hidOutputReport[3] = 0xFF;
+					_hidOutputReport[5] = 0xFF;
+
 					if (GlobalConfiguration.Instance.DisableRumble)
 					{
 						_hidOutputReport[4] = 0;
@@ -346,8 +356,8 @@ namespace ScpControl.Bluetooth.Ds3
         private readonly byte[] _hidOutputReport =
         {
             0x52, 0x01,
-            0x00, 0xFF, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0xFF,
+            0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00,
             0xFF, 0x27, 0x10, 0x00, 0x32,
             0xFF, 0x27, 0x10, 0x00, 0x32,
             0xFF, 0x27, 0x10, 0x00, 0x32,
