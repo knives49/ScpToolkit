@@ -25,16 +25,6 @@ namespace ScpControl.Usb.Ds3
 
 		public DS3CalData(byte[] eepromData)
 		{
-			if (eepromData == null) //default values
-			{
-				_calX.val1 = _calX.val2 = 0;
-				_calY.val1 = _calY.val2 = 0;
-				_calZ.val1 = _calZ.val2 = 0;
-				_calG.val1 = 512;
-				_calG.val2 = 0x80;
-				return;
-			}
-
 			int idx = 0x11; //starts here, has 8 big endian uint16s
 
 			_calX.val1 = (uint)eepromData[idx + 1] + ((uint)eepromData[idx + 0] << 8); idx += 2;
@@ -167,14 +157,6 @@ namespace ScpControl.Usb.Ds3
 
 		public int InitialCal(byte[] buffer)
 		{
-			if (buffer == null) //default values
-			{
-				_setReportFlags = 0x18; //theres no way to get this right without status bytes, most common i guess
-				var retVal = DS3CalLibrary.Instance.InitialCal((ushort)_calValues.G.val2, (ushort)_calValues.G.val1, out _setReportCalByte, _gyroStruct);
-				_lastCalByteSaved = _setReportCalByte;
-				return retVal;
-			}
-
 			_setReportFlags = 0;
 			if (buffer[8] == 0x18 && buffer[9] == 0x18 && buffer[10] == 0x18 && buffer[11] == 0x18)
 				_setReportFlags |= 0x8;

@@ -47,11 +47,13 @@ namespace ScpControl.Bluetooth.Ds3
 				}
 			}
 
-			//will work with nulls, just will load defaults
-			_cal = new DS3CalInstance(DeviceAddress, eepromContents);
-			_cal.InitialCal(statusContents);
-			
-			if (!IsFake && (eepromContents == null || statusContents == null))
+			if (eepromContents != null && statusContents != null)
+			{
+				_cal = new DS3CalInstance(DeviceAddress, eepromContents);
+				_cal.InitialCal(statusContents);
+			}
+
+			if (!IsFake && _cal == null)
 				Log.WarnFormat("EEPROM data for DS3 controller {0} not present, please connect it via USB first!", DeviceAddress.AsFriendlyName());
 
 			m_Queued = 1;
