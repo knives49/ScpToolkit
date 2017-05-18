@@ -150,6 +150,7 @@
     <Compile Include="ScpCore\SingletonBase.cs" />
     <Compile Include="Sound\AudioPlayer.cs" />
     <Compile Include="Usb\Ds3\DS3Cal.cs" />
+    <Compile Include="Usb\Ds4\DS4Cal.cs" />
     <Compile Include="Usb\Gamepads\UsbBadBigBenGamepad.cs" />
     <Compile Include="Usb\Gamepads\UsbGenericGamepad.cs" />
     <Compile Include="Usb\Ds3\Replica\UsbDs3Afterglow.cs" />
