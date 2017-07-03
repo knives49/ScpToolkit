@@ -279,31 +279,41 @@ namespace ScpControl.Shared.Core
 		}
 
         /// <summary>
-        ///     Gets the motion data from the DualShock accelerometer sensor.
+        ///     Gets the linear acceleration data from the DualShock accelerometer sensor.
         /// </summary>
 		/// <remarks>
 		///			http://eleccelerator.com/wiki/index.php?title=DualShock_3 (off by one and mistaken endianness)
-		///			http://www.psdevwiki.com/ps4/DS4-USB
+		///			https://github.com/RPCS3/rpcs3/blob/master/rpcs3/ds4_pad_handler.cpp
 		///	</remarks>
-        public DsAccelerometer Motion
+        public DsAccelerometer Accelerometer
         {
             get
             {
+				short intX, intY, intZ;
+
                 switch (Model)
                 {
                     case DsModel.DS3:
+						intX = (short)(1023 -	(((ushort)RawBytes[41 + 8] << 8) | (ushort)RawBytes[42 + 8])); //negated
+						intZ = (short)			(((ushort)RawBytes[43 + 8] << 8) | (ushort)RawBytes[44 + 8]); 
+						intY = (short)			(((ushort)RawBytes[45 + 8] << 8) | (ushort)RawBytes[46 + 8]); //Y is gravity, which appears here
+
 						return new DsAccelerometer
 						{
-							X = (short)(1023 -	(((ushort)RawBytes[41 + 8] << 8) | (ushort)RawBytes[42 + 8])), //negated
-							Z = (short)			(((ushort)RawBytes[43 + 8] << 8) | (ushort)RawBytes[44 + 8]), 
-							Y = (short)			(((ushort)RawBytes[45 + 8] << 8) | (ushort)RawBytes[46 + 8]) //Y is gravity, which appears here
+							X = (float)(intX - 512) / 113.0f,
+							Y = (float)(intY - 512) / 113.0f,
+							Z = (float)(intZ - 512) / 113.0f
 						};
                     case DsModel.DS4:
+						intX = (short)-(((ushort)RawBytes[20 + 8] << 8) | (ushort)RawBytes[19 + 8]);
+						intY = (short)-(((ushort)RawBytes[22 + 8] << 8) | (ushort)RawBytes[21 + 8]);
+						intZ = (short)-(((ushort)RawBytes[24 + 8] << 8) | (ushort)RawBytes[23 + 8]);
+
                         return new DsAccelerometer
                         {
-							X = (short)-(((ushort)RawBytes[20 + 8] << 8) | (ushort)RawBytes[19 + 8]),
-							Y = (short)-(((ushort)RawBytes[22 + 8] << 8) | (ushort)RawBytes[21 + 8]),
-							Z = (short)-(((ushort)RawBytes[24 + 8] << 8) | (ushort)RawBytes[23 + 8])
+							X = (float)(intX) / 8192.0f,
+							Y = (float)(intY) / 8192.0f,
+							Z = (float)(intZ) / 8192.0f
                         };
                 }
 
@@ -312,31 +322,39 @@ namespace ScpControl.Shared.Core
         }
 
         /// <summary>
-        ///     Gets the orientation data from the DualShock gyroscope sensor.
+        ///     Gets the angular velocity data from the DualShock gyroscope sensor.
         /// </summary>
 		/// <remarks>
 		///			http://eleccelerator.com/wiki/index.php?title=DualShock_3 (off by one and mistaken endianness) 
-		///			http://www.psdevwiki.com/ps4/DS4-USB
+		///			https://github.com/RPCS3/rpcs3/blob/master/rpcs3/ds4_pad_handler.cpp
 		///	</remarks>
-        public DsGyroscope Orientation
+        public DsGyroscope Gyroscope
         {
             get
             {
+				short intPitch, intYaw, intRoll;
+
                 switch (Model)
                 {
                     case DsModel.DS3:
+						intYaw		= (short)(((ushort)RawBytes[47 + 8] << 8) | (ushort)RawBytes[48 + 8]);
+
 						return new DsGyroscope
 						{
-							Roll = 0,
-							Yaw = (short)(((ushort)RawBytes[47 + 8] << 8) | (ushort)RawBytes[48 + 8]),
-							Pitch = 0
+							Pitch	= Single.NaN,
+							Yaw		= (float)(intYaw - 512) * (90.0f/123.0f),							
+							Roll	= Single.NaN
 						};
                     case DsModel.DS4:
+						intPitch	= (short) (((ushort)RawBytes[14 + 8] << 8) | (ushort)RawBytes[13 + 8]);
+						intYaw		= (short)-(((ushort)RawBytes[16 + 8] << 8) | (ushort)RawBytes[15 + 8]);
+						intRoll		= (short)-(((ushort)RawBytes[18 + 8] << 8) | (ushort)RawBytes[17 + 8]);
+
                         return new DsGyroscope
                         {
-							Pitch = (short) (((ushort)RawBytes[14 + 8] << 8) | (ushort)RawBytes[13 + 8]),
-							Yaw =	(short)-(((ushort)RawBytes[16 + 8] << 8) | (ushort)RawBytes[15 + 8]),
-							Roll =	(short)-(((ushort)RawBytes[18 + 8] << 8) | (ushort)RawBytes[17 + 8])                            
+							Pitch	= (float)(intPitch) / 16.4f,
+							Yaw		= (float)(intYaw)	/ 16.4f,
+							Roll	= (float)(intRoll)	/ 16.4f	                            
                         };
                 }
 
