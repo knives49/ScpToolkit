@@ -352,9 +352,9 @@ namespace ScpControl.Shared.Core
 
                         return new DsGyroscope
                         {
-							Pitch	= (float)(intPitch) / 16.4f,
-							Yaw		= (float)(intYaw)	/ 16.4f,
-							Roll	= (float)(intRoll)	/ 16.4f	                            
+							Pitch	= (float)(intPitch) / 16.0f,
+							Yaw		= (float)(intYaw)	/ 16.0f,
+							Roll	= (float)(intRoll)	/ 16.0f	                            
                         };
                 }
 
