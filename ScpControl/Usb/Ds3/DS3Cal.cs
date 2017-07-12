@@ -326,7 +326,7 @@ namespace ScpControl.Usb.Ds3
 					}
 				}
 			}
-			if ((_setReportFlags & 0x20) != 0)
+			if ((_setReportFlags & 0x20) != 0 || (_setReportFlags == 0x08)) //pre-dualshock sixaxis seem to need it inverted ?
 			{
 				//G needs sign inversion
 				int gVal = 1023 - (int)gyroVal;
