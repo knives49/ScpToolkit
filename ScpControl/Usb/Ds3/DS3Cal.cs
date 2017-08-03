@@ -158,8 +158,11 @@ namespace ScpControl.Usb.Ds3
 		public int InitialCal(byte[] buffer)
 		{
 			_setReportFlags = 0;
-			if (buffer[8] == 0x18 && buffer[9] == 0x18 && buffer[10] == 0x18 && buffer[11] == 0x18)
+			if ((buffer[8] == 0x18 && buffer[9] == 0x18 && buffer[10] == 0x18 && buffer[11] == 0x18) ||
+				(buffer[8] == 0x17 && buffer[9] == 0x17 && buffer[10] == 0x17 && buffer[11] == 0x17))
+			{
 				_setReportFlags |= 0x8;
+			}
 
 			const int idxCalibBytes = 0x26;
 			if ((buffer[idxCalibBytes + 0] != 1 || buffer[idxCalibBytes + 1] != 2) &&
