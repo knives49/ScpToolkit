@@ -234,6 +234,8 @@ namespace ScpDriverInstaller
         private readonly UsbNotifier _winUsbDs3 = new UsbNotifier(0x054C, 0x0268, UsbDs3.DeviceClassGuid);
         private readonly UsbNotifier _hidUsbDs4 = new UsbNotifier(0x054C, 0x05C4);
         private readonly UsbNotifier _winUsbDs4 = new UsbNotifier(0x054C, 0x05C4, UsbDs4.DeviceClassGuid);
+        private readonly UsbNotifier _hidUsbDs4_2 = new UsbNotifier(0x054C, 0x09CC);
+        private readonly UsbNotifier _winUsbDs4_2 = new UsbNotifier(0x054C, 0x09CC, UsbDs4.DeviceClassGuid);
 
         /// <summary>
         ///     The GUID_BTHPORT_DEVICE_INTERFACE device interface class is defined for Bluetooth radios.
@@ -625,6 +627,8 @@ namespace ScpDriverInstaller
                 _winUsbDs3.UnregisterHandle();
                 _hidUsbDs4.UnregisterHandle();
                 _winUsbDs4.UnregisterHandle();
+                _hidUsbDs4_2.UnregisterHandle();
+                _winUsbDs4_2.UnregisterHandle();
                 _genericBluetoothHost.UnregisterHandle();
             }
 
@@ -671,6 +675,10 @@ namespace ScpDriverInstaller
                 _winUsbDs4.OnSpecifiedDeviceArrived += (sender, args) => OnUsbDeviceAddedOrRemoved();
                 _winUsbDs4.RegisterHandle(_hWnd);
                 _winUsbDs4.CheckDevicePresent();
+                _winUsbDs4_2.OnDeviceRemoved += (sender, args) => OnUsbDeviceAddedOrRemoved();
+                _winUsbDs4_2.OnSpecifiedDeviceArrived += (sender, args) => OnUsbDeviceAddedOrRemoved();
+                _winUsbDs4_2.RegisterHandle(_hWnd);
+                _winUsbDs4_2.CheckDevicePresent();
             }
 
             // listen for Bluetooth devices (BTHUSB or WinUSB)
@@ -701,6 +709,8 @@ namespace ScpDriverInstaller
             _winUsbDs3.ParseMessages(msg, wParam);
             _hidUsbDs4.ParseMessages(msg, wParam);
             _winUsbDs4.ParseMessages(msg, wParam);
+            _hidUsbDs4_2.ParseMessages(msg, wParam);
+            _winUsbDs4_2.ParseMessages(msg, wParam);
             _genericBluetoothHost.ParseMessages(msg, wParam);
             _winUsbBluetoothHost.ParseMessages(msg, wParam);
 
